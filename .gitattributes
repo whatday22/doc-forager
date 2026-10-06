@@ -1,0 +1,11 @@
+# 仓库内统一使用 LF，避免 Windows 上 core.autocrlf 造成的无谓 diff
+* text=auto eol=lf
+
+# 二进制文件不要做行尾转换
+*.docx binary
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.webp binary
+*.zip  binary

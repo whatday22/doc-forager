@@ -1,0 +1,32 @@
+# 依赖与构建产物
+# 本项目零依赖、零构建，这几条只是防御性预留
+node_modules/
+dist/
+build/
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 测试过程中导出的结果文件（Markdown / JSON / CSV）
+测试输出/
+
+# 临时诊断脚本与草稿
+._*
+*.tmp
+*.log
+
+# 本地手工备份目录（内容与工作区重复，不该进仓库）
+备份/
+backup/
+
+# 发布操作指南（针对本机的一次性 walkthrough，不属于项目文档）
+发布到GitHub.md
+
+# 注意：测试样本/ 是故意提交的 —— 它是《测试指南》的前置条件，
+# 总共约 10 KB，也可以随时用 node make-samples.mjs 重新生成。
