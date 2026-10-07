@@ -163,6 +163,29 @@ ok(dupIds.length === 0, 'HTML id 无重复' + (dupIds.length ? '  重复: ' + [.
      (leaks.length ? '  发现: ' + [...new Set(leaks)].slice(0, 5).join(' ') : ''));
 }
 
+// ---- 2.8) 文档里引用的本地文件都存在 ----
+// 首图路径写错的话，GitHub 首页就是一个裂图，但本地看不出来 —— 所以必须机器校验。
+{
+  const dead = [];
+  let n = 0;
+  for (const md of ['README.md', 'docs/README.md', '测试指南.md']) {
+    if (!fs.existsSync(md)) continue;
+    const src = fs.readFileSync(md, 'utf8').replace(/```[\s\S]*?```/g, '').replace(/`[^`]*`/g, '');
+    const refs = new Set();
+    for (const m of src.matchAll(/!\[[^\]]*\]\(([^)\s]+)/g)) refs.add(m[1]);
+    for (const m of src.matchAll(/\[[^\]]*\]\(([^)\s]+)\)/g)) refs.add(m[1]);
+    for (const r of refs) {
+      if (/^([a-z]+:|\/\/|#)/i.test(r)) continue;
+      const clean = r.split('#')[0];
+      if (!clean) continue;
+      n++;
+      if (!fs.existsSync(path.resolve(path.dirname(md), clean))) dead.push(md + ' → ' + r);
+    }
+  }
+  ok(dead.length === 0, '文档里 ' + n + ' 个本地引用全部存在' +
+     (dead.length ? '  失效: ' + dead.slice(0, 5).join('; ') : ''));
+}
+
 // ---- 3) 提示词解析 ----
 const p = T.parsePrompt(T.DEMO_PROMPTS[0]);
 ok(p.terms.length >= 8, 'parsePrompt 抽出分支数 = ' + p.terms.length);
