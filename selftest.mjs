@@ -133,6 +133,36 @@ const allIds = [...html.matchAll(/\bid="([^"]+)"/g)].map(m => m[1]);
 const dupIds = allIds.filter((v, i) => allIds.indexOf(v) !== i);
 ok(dupIds.length === 0, 'HTML id 无重复' + (dupIds.length ? '  重复: ' + [...new Set(dupIds)].join(', ') : ''));
 
+// ---- 2.6) HTML 标签配对 ----
+// 少一个 '<' 的后果很隐蔽：'</span>' 会作为字面文本渲染到界面上（曾经真的发生过 9 处）。
+{
+  let masked = html.replace(/<script>[\s\S]*?<\/script>/g, m => '<script>' + ' '.repeat(m.length - 17) + '</script>');
+  masked = masked.replace(/<style>[\s\S]*?<\/style>/g, m => '<style>' + ' '.repeat(m.length - 15) + '</style>');
+  masked = masked.replace(/<!--[\s\S]*?-->/g, m => ' '.repeat(m.length));
+  const VOID = new Set(['area','base','br','col','embed','hr','img','input','link','meta','param','source','track','wbr']);
+  const stk = [], bad = [];
+  const tagRe = /<(\/?)([a-zA-Z][a-zA-Z0-9:-]*)((?:"[^"]*"|'[^']*'|[^>"'])*?)(\/?)>/g;
+  let tm;
+  while ((tm = tagRe.exec(masked))) {
+    const closing = tm[1], name = tm[2].toLowerCase();
+    if (VOID.has(name) || tm[4] === '/') continue;
+    if (!closing) { stk.push(name); continue; }
+    const at = stk.lastIndexOf(name);
+    if (at < 0) bad.push('多余的 </' + name + '>');
+    else { if (at !== stk.length - 1) bad.push('<' + stk[stk.length - 1] + '> 未闭合'); stk.length = at; }
+  }
+  for (const s of stk) bad.push('<' + s + '> 未闭合');
+  ok(bad.length === 0, 'HTML 标签全部配对' + (bad.length ? '  问题: ' + bad.slice(0, 5).join('; ') : ''));
+}
+
+// ---- 2.7) 不该出现在界面上的字面量 ----
+// 闭合标签如果丢了 '<'，就会变成可见文本。单独断言一次，报错信息更直白。
+{
+  const leaks = [...html.matchAll(/\s\/[a-zA-Z][a-zA-Z0-9]*>/g)].map(m => m[0].trim());
+  ok(leaks.length === 0, '没有裸的 "/标签>" 字面量泄漏到界面' +
+     (leaks.length ? '  发现: ' + [...new Set(leaks)].slice(0, 5).join(' ') : ''));
+}
+
 // ---- 3) 提示词解析 ----
 const p = T.parsePrompt(T.DEMO_PROMPTS[0]);
 ok(p.terms.length >= 8, 'parsePrompt 抽出分支数 = ' + p.terms.length);
