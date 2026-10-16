@@ -228,10 +228,6 @@ internal sealed class DesktopBridge : IDisposable
             case "clear-overlay":
                 _overlay.ClearOverlay();
                 break;
-            case "highlight":
-                if (TryReadHit(message, out var hit)) _overlay.AddHit(hit);
-                else await SendAsync(new { type = "bridge-error", message = "覆盖层坐标无效" }, cancellationToken);
-                break;
             default:
                 await SendAsync(new { type = "bridge-error", message = "未知的桌面桥接命令" }, cancellationToken);
                 break;
@@ -244,6 +240,14 @@ internal sealed class DesktopBridge : IDisposable
         {
             var result = await DesktopOcr.ReadVirtualScreenAsync(cancellationToken);
             _overlay.ShowOverlay();
+            _overlay.SetCrawlSpeed(result.Blocks.Count);
+            foreach (var block in result.Blocks)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                _overlay.CrawlTo(new OverlayTarget(
+                    block.X + block.Width / 2,
+                    block.Y + block.Height / 2));
+            }
             await SendAsync(new
             {
                 type = "scan-complete",
@@ -301,21 +305,6 @@ internal sealed class DesktopBridge : IDisposable
         {
             _sendLock.Release();
         }
-    }
-
-    private static bool TryReadHit(JsonElement message, out OverlayHit hit)
-    {
-        hit = default;
-        if (!ReadFinite(message, "x", out var x) ||
-            !ReadFinite(message, "y", out var y) ||
-            !ReadFinite(message, "width", out var width) ||
-            !ReadFinite(message, "height", out var height) ||
-            !ReadFinite(message, "score", out var score) ||
-            width <= 0 || height <= 0 || width > 10000 || height > 10000)
-            return false;
-
-        hit = new OverlayHit((float)x, (float)y, (float)width, (float)height, Math.Clamp((float)score, 0, 1));
-        return true;
     }
 
     private static bool ReadFinite(JsonElement json, string name, out double value)

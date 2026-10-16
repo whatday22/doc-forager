@@ -689,10 +689,13 @@ ok(!!financeBlock && financeBlock.section === '财务报告', '段落归属章�
 ok(T.parsePlain('段落一。\n\n段落二。\n\n\n段落三。').length === 3, '纯文本按空行切段');
 const screenDoc = T.screenDocumentFromResult({
   virtualScreen:{ x:-1920, y:0, width:3840, height:1080 },
-  blocks:[{ text:'财务 营收', x:-1880, y:120, width:180, height:24 }]
+  blocks:[
+    { text:'财务 营收', x:-1880, y:120, width:180, height:24 },
+    { text:'不含关键词的屏幕文字也应完整保留', x:40, y:220, width:240, height:24 }
+  ]
 });
-ok(screenDoc.kind === 'screen' && screenDoc.blocks.length === 1,
-   '整屏 OCR 结果进入标准文档块模型');
+ok(screenDoc.kind === 'screen' && screenDoc.blocks.length === 2,
+   '整屏 OCR 的所有文字行进入标准文档块模型');
 ok(screenDoc.blocks[0].screenRect.x === -1880 && screenDoc.virtualScreen.x === -1920,
    '整屏文档保留多显示器负坐标与命中框');
 let badScreenRejected = false;
@@ -779,10 +782,12 @@ T.S.file = screenDoc;
 T.setPromptText('财务 营收\n置信度 0.05');
 await T.runFileScan();
 const screenSnap = T.exportSnapshot();
-ok(T.S.matches.length === 1 && T.S.coverage.totalChars > 0,
-   '整屏 OCR 文本经过现有关键词评分和覆盖审计');
+ok(T.S.matches.length === 2 && T.S.coverage.totalChars > 0,
+   '整屏 OCR 全部文字行均被保留并经过关键词评分和覆盖审计');
 ok(screenSnap.mode === 'windows-screen' && screenSnap.pages[0].screenRect.x === -1880,
    '整屏扫描导出模式和负坐标命中框');
+ok(screenSnap.pages.length === 2 && screenSnap.pages.some(p => p.content === '不含关键词的屏幕文字也应完整保留'),
+   '整屏导出包含未命中关键词的全部 OCR 文本');
 ok(T.toMarkdown(screenSnap).indexOf('## 抽取内容') > 0,
    '整屏结果可生成文档模式 Markdown 报告');
 T.S.mode = 'file';
@@ -1044,8 +1049,9 @@ ok(/Zong/.test(rs2.author || ''), '导出含作者署名 = ' + rs2.author);
 
   // 再次触碰应重新逐字
   moveH({ clientX: T.bug.x, clientY: T.bug.y });
-  await settle(1);
-  ok(txtEl.textContent.length === 0 && tipEl.classList.contains('show'), '再次触碰重新逐字');
+  await settle(2);
+  ok(txtEl.textContent.length < T.PET_TEXT.length && tipEl.classList.contains('show'),
+     '再次触碰从文案开头重新逐字');
 }
 
 console.log(fails === 0 ? '\n===== ALL CHECKS PASSED =====' : '\n===== ' + fails + ' CHECK(S) FAILED =====');

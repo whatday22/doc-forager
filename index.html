@@ -1440,7 +1440,7 @@ function updatePet(dt){
 
   const tip = $('#bugTip');
   if(!tip) return;
-  const canPet = MOUSE.on && !S.running && bug.state === 'idle' && !bug.target;
+  const canPet = S.mode !== 'screen' && MOUSE.on && !S.running && bug.state === 'idle' && !bug.target;
   const near   = canPet && Math.hypot(MOUSE.x-bug.x, MOUSE.y-bug.y) < PET_RADIUS;
 
   if(near && !pet.near){                  // 刚被碰到：重置并触发
@@ -1585,7 +1585,7 @@ function drawNetwork(){
   drawNodes(g, t, nNow);
   drawLabels(g);
   drawPackets(g);
-  drawBug(g);
+  if(S.mode !== 'screen') drawBug(g);
   S.netDirty = false;
 }
 
@@ -2103,7 +2103,9 @@ function addExtract(node, hits, block){
   if(block){
     // 本地文件 / Scrapling 导出模式
     const tk = (node.tokens||[]).slice(0,5).map(t=>`<span>${escapeHtml(t)}</span>`).join('');
-    const head = node.isTable
+    const head = S.mode === 'screen'
+      ? `<span class="ty" style="color:${tyCol}">屏幕文本</span>`
+      : node.isTable
       ? `<span class="ty" style="color:#ffd60a">表格 ${node.tableIndex}</span>`
       : block.type === 'record'
         ? `<span class="ty" style="color:#5ad6ff">记录 ${((node.blockIndex|0)+1)}</span>`
@@ -2309,7 +2311,9 @@ function slowTick(){
 
   // 统计（文件模式下按文档口径改写前几项，避免显示毫无意义的"0 / 36 页"）
   stEl['PAGES'].textContent     = isFile
-      ? (S.matches.length + ' 命中 / ' + S.scannedBlocks + ' 块')
+      ? (S.mode === 'screen'
+          ? (S.matches.length + ' 屏幕文字行 / ' + S.scannedBlocks + ' 行')
+          : (S.matches.length + ' 命中 / ' + S.scannedBlocks + ' 块'))
       : (vis + ' / ' + (S.cfg ? S.cfg.maxPages : 0));
   stEl['EDGES'].textContent     = S.links.length;
   stEl['DISCOVERED'].textContent= S.mode === 'screen' ? S.scannedBlocks : isFile ? S.tables.length : S.discovered;
@@ -3783,7 +3787,8 @@ async function runFileScan(){
     const res = scoreText(b.text, b.section || '', S.terms, kind, S.cfg.deny, true);
     b._score = res.score;
     b._hits = res.hits;
-    if(res.score >= S.cfg.minConf) S.matches.push({ block:b, score:res.score, hits:res.hits });
+    if(S.mode === 'screen' || res.score >= S.cfg.minConf)
+      S.matches.push({ block:b, score:res.score, hits:res.hits });
 
     // 覆盖率：本块内所有关键词命中区间的并集，其余即「关键词从未碰到的部分。
     const txt = b.text;
@@ -3824,7 +3829,7 @@ async function runFileScan(){
       if(abortFlag) break;
     }
   }
-  S.matches.sort((a,b)=>b.score - a.score);
+  if(S.mode !== 'screen') S.matches.sort((a,b)=>b.score - a.score);
 
   // 覆盖率结论：这是"完整提取"的可核对凭据，而不是一句口号
   cov.gaps.sort((a,b)=>b.len - a.len);
@@ -3851,8 +3856,13 @@ async function runFileScan(){
       ? clamp(t.hits.reduce((m,h)=>Math.max(m,h.w),0) * 0.7 + 0.25)
       : 0.18;
   }
-  addLog('SCAN', S.matches.length + ' 处命中 / ' + S.tables.length + ' 个表格', 1, S.matches.length ? 'v-hit' : 'v-rej');
-  if(!S.matches.length) toast('没有命中任何关键词，试试减少或更换关键词；表格仍已全部提取', 5000);
+  addLog(S.mode === 'screen' ? 'OCR' : 'SCAN',
+         S.mode === 'screen'
+           ? '读取 ' + S.matches.length + ' 行屏幕文字'
+           : S.matches.length + ' 处命中 / ' + S.tables.length + ' 个表格',
+         1, S.matches.length ? 'v-hit' : 'v-rej');
+  if(!S.matches.length && S.mode !== 'screen')
+    toast('没有命中任何关键词，试试减少或更换关键词；表格仍已全部提取', 5000);
 
   // ---- 阶段 2：动画呈现 top N ----
   const branchNodes = new Map();
@@ -3862,7 +3872,9 @@ async function runFileScan(){
     branchNodes.set(t.term, n);
     addLink(root, n, 0.92);
   }
-  const topN = S.matches.slice(0, Math.max(4, S.cfg.maxPages));
+  const topN = S.mode === 'screen'
+    ? S.matches
+    : S.matches.slice(0, Math.max(4, S.cfg.maxPages));
   const pace = clamp(1600 / Math.max(1, topN.length), 0, 110);
   bug.speed = clamp(2200 / Math.sqrt(Math.max(1, topN.length)), 260, 1200);
 
@@ -3871,8 +3883,9 @@ async function runFileScan(){
     if(abortFlag) break;
     const m = topN[i];
     const b = m.block;
-    const best = (m.hits.slice().sort((x,y)=>y.w - x.w)[0] || {}).term || S.terms[0].term;
-    const parentKw = branchNodes.get(best) || branchNodes.get(S.terms[0].term);
+    const best = (m.hits.slice().sort((x,y)=>y.w - x.w)[0] || {}).term ||
+                 (S.terms[0] && S.terms[0].term) || '屏幕文字';
+    const parentKw = branchNodes.get(best) || branchNodes.get(S.terms[0] && S.terms[0].term);
     const isTbl = b.type === 'table';
     const isRec = b.type === 'record';
 
@@ -3920,9 +3933,6 @@ async function runFileScan(){
     loc.blockStart = b.start;
     loc.isTable = b.type === 'table';
     if(loc.isTable) loc.tableIndex = b.table.index;
-    if(S.mode === 'screen' && b.screenRect)
-      sendNative({ type:'highlight', ...b.screenRect, score:m.score });
-
     S.bytes += b.len;
     S.scores.push(m.score);
     if(S.scores.length > MEM.KEEP_SCORES) S.scores.splice(0, S.scores.length - MEM.KEEP_SCORES);
@@ -3963,13 +3973,17 @@ async function runFileScan(){
   $('#btnStop').disabled = true;
   setLed('idle');
   setPhase('DONE');
-  S.bugMsg = '扫描完成 · ' + S.matches.length + ' 处命中 / ' + S.tables.length + ' 个表格';
+  S.bugMsg = S.mode === 'screen'
+    ? '桌面读取完成 · ' + S.matches.length + ' 行屏幕文字'
+    : '扫描完成 · ' + S.matches.length + ' 处命中 / ' + S.tables.length + ' 个表格';
   pruneGraph(true);
   updateExportBar();
   updateReviewStat();
-  toast('扫描完成：' + S.matches.length + ' 处命中，' + S.tables.length + ' 个表格，覆盖率 ' +
-        ((S.coverage ? S.coverage.ratio : 0)*100).toFixed(1) + '%');
-  if(S.mode === 'screen') sendNative({ type:'clear-overlay' });
+  toast(S.mode === 'screen'
+    ? '桌面读取完成：已保留全部 ' + S.matches.length + ' 行 OCR 文字，关键词覆盖率 ' +
+      ((S.coverage ? S.coverage.ratio : 0)*100).toFixed(1) + '%'
+    : '扫描完成：' + S.matches.length + ' 处命中，' + S.tables.length + ' 个表格，覆盖率 ' +
+      ((S.coverage ? S.coverage.ratio : 0)*100).toFixed(1) + '%');
 }
 
 /* ============================================================================
@@ -4567,9 +4581,9 @@ const MODE_UI = {
 MODE_UI.screen = {
   ...MODE_UI.file,
   file:'desktop-screen',
-  hint:'整屏 OCR 仅在点击启动后进行 · 截图只在内存处理 · 关键词评分与覆盖审计沿用本地文档流程',
+  hint:'点击启动读取当前桌面全部文字 · 截图仅内存处理 · 关键词评分用于审计，不过滤 OCR 结果',
   bar:'SCREEN OCR CONTENT',
-  cards:['▚ SCREEN MATCHES','▚ MEAN RELEVANCE','▚ OCR BLOCKS']
+  cards:['▚ SCREEN TEXT LINES','▚ MEAN RELEVANCE','▚ OCR BLOCKS']
 };
 MODE_UI.real = MODE_UI.sim;
 
