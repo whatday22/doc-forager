@@ -2,8 +2,8 @@
 
 [![license](https://img.shields.io/badge/license-MIT-00ffc6?style=flat-square)](LICENSE)
 [![deps](https://img.shields.io/badge/dependencies-0-ffd60a?style=flat-square)](#这个项目不是什么)
-[![tests](https://img.shields.io/badge/selftest-264%20passing-3dff88?style=flat-square)](#自测)
-[![single file](https://img.shields.io/badge/build-none%20%C2%B7%20single%20file-5ad6ff?style=flat-square)](#快速开始)
+[![tests](https://img.shields.io/badge/selftest-270%20passing-3dff88?style=flat-square)](#自测)
+[![browser app](https://img.shields.io/badge/browser-standalone%20%C2%B7%20optional%20Windows%20bridge-5ad6ff?style=flat-square)](#windows-%E6%95%B4%E5%B1%8F%E6%A1%8C%E9%9D%A2%E6%A8%A1%E5%BC%8F)
 
 **从一堆材料里挑出相关内容，并且能证明自己没漏、能说明为什么收或不收。**
 
@@ -20,15 +20,16 @@
      没有 GIF 时用 docs/shot-01-local-file.png 也可以，见 docs/README.md。 -->
 ![界面演示](docs/shot-01-local-file.png)
 
-赛博朋克 HUD · 纯黑背景 · 力导向蛛网拓扑 · 单文件零依赖 · 零构建 · 全程本地。
+赛博朋克 HUD · 纯黑背景 · 力导向蛛网拓扑 · 浏览器版单文件零依赖；Windows 整屏模式使用可选原生桥接程序。
 
 ---
 
-## 三种数据来源
+## 四种数据来源
 
 | 来源 | 说明 |
 |---|---|
 | **本地文件**（默认） | `.docx` / `.md` / `.txt` / `.html` / `.json` / `.jsonl` / `.csv` —— 文档从不离开你的机器 |
+| **Windows 整屏** | 可选原生桌面桥接程序在用户点击启动后捕获虚拟桌面并调用 Windows OCR，蜘蛛叠加层显示在真实桌面 |
 | **Scrapling 导出** | 直接吃 Scrapling 的 `to_json()` / `to_jsonl()` / `to_csv()` 产物，自动识别字段角色 |
 | **真实抓取** | 基础 HTTP 抓取（可选，非本项目的强项，见下文） |
 
@@ -51,7 +52,7 @@
 
 ## 快速开始
 
-双击打开 **[index.html](index.html)** 就能用（不需要装任何东西、不需要起服务）。
+双击打开 **[index.html](index.html)** 就能使用浏览器版（不需要装任何东西、不需要起服务）。
 
 默认是 **本地文件** 模式：把 `.docx` 或 `.md` 拖进左上角的虚线框，在编辑区输入关键词，
 按 **▶ 启动**（或 `Ctrl+Enter`）—— 命中位置会逐条被数码虫爬出来，
@@ -66,13 +67,28 @@
 ├── 测试指南.md           12 个功能的逐步验收步骤 + 预期结果
 ├── 测试样本/            测试素材（docx / md / jsonl / json / csv）
 ├── selftest.mjs        回归自测：node selftest.mjs
+├── windows-desktop/    可选 Windows OCR 宿主与透明桌面蜘蛛覆盖层
 ├── make-samples.mjs    重新生成测试样本
 ├── verify-samples.mjs  校验样本文件完整性
 ├── proxy.mjs           可选本地中继，真实抓取模式用：node proxy.mjs
 └── README.md
 ```
 
-**index.html 本身就是完整产品**，其余文件都可以不用。
+`index.html` 单独即可使用本地文件、模拟和真实抓取功能。Windows 整屏模式需要启动下文的原生桌面桥接程序。
+
+### Windows 整屏桌面模式
+
+此模式读取**当前 Windows 桌面**，不是网页截图或单独的应用窗口。桥接程序会捕获整个虚拟桌面（包括多显示器与负坐标区域），将画面切片交给 Windows OCR；识别出的文本行会进入同一套关键词评分、命中列表和覆盖率审计。命中时，透明、鼠标穿透的蜘蛛覆盖层会沿桌面实际文字位置移动并标记命中框。
+
+1. Windows 10 19041 或更新版本，安装 .NET 8 SDK；Windows 还需安装与屏幕文字匹配的 OCR 语言包。
+2. 在仓库根目录运行：
+   ```powershell
+   dotnet run --project windows-desktop\DocForager.Desktop.csproj
+   ```
+   桥接程序会驻留在系统托盘，只监听 `127.0.0.1:47831`。
+3. 用 Edge 打开 `index.html`，数据来源选择 **Windows 整屏**。网页显示桥接已连接后，编辑关键词并点击 **▶ 启动**；只有这次主动点击才会捕获屏幕。扫描可用 **■ 停止** 取消。
+
+截图只在桥接程序内存中短暂存在，不写入文件；OCR 文本仅经本机 loopback WebSocket 传给当前网页，不发送到网络服务，也不写入日志。扫描结果仍会显示在网页的提取流中，并可像本地文档结果一样导出。若所选语言没有可用 OCR 包，程序会明确报错，不会伪装成空扫描。
 
 ---
 
@@ -412,11 +428,11 @@ pruneGraph → 节点被压回软上限 = 80，前沿 = 36
 node selftest.mjs
 ```
 
-264 项断言，覆盖：
+270 项断言，覆盖：
 
 | 分组 | 内容 |
 |---|---|
-| 静态契约 | 脚本语法编译、**JS 引用的 89 个 DOM id 是否都存在**、HTML id 无重复 |
+| 静态契约 | 脚本语法编译、**JS 引用的 DOM id 是否都存在**、HTML id 无重复 |
 | 提示词 DSL | 指令解析（含省略冒号）、否定清单、中文分词、示例保留 ASCII 术语 |
 | 评分器 | 单调性、标定误差、同输入抖动带宽、相关度色标单调 |
 | **ZIP 容器层** | 用 Node `zlib.deflateRawSync` 造**真实 deflate 数据**，经浏览器同款 `DecompressionStream('deflate-raw')` 往返；同时覆盖 store(method 0) 与非法输入 |
@@ -424,6 +440,7 @@ node selftest.mjs
 | **表格合并还原** | `w:gridSpan` 横向 + `w:vMerge` 纵向 → 网格铺开、`rowspan`/`colspan`、渲染 HTML |
 | 文档解析 | Markdown 标题/段落/表格、章节归属、`.doc` 与未知扩展名被拒绝 |
 | **文档扫描端到端** | 全量扫描 → 动画 → 图节点/评分聚合/抽取列表/无命中兜底 |
+| **Windows 整屏集成** | OCR 块进入标准扫描器、多显示器负坐标、越界位置拒绝、覆盖审计与 Markdown 导出 |
 | **确定性** | 同一文档 + 同一关键词重复扫描，结果**逐条完全一致** |
 | 导出 | 四种格式的结构、CSV 转义、BOM、全量命中而非动画条数、表格完整还原 |
 | 抓取引擎 | 端到端 10 页、图/评分/日志/抽取/字节/终态、中止路径 |

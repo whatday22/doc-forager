@@ -3,6 +3,8 @@
 node_modules/
 dist/
 build/
+windows-desktop/bin/
+windows-desktop/obj/
 
 # 编辑器 / 系统
 .vscode/
