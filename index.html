@@ -3323,12 +3323,14 @@ function connectNativeBridge(){
         toast('整屏 OCR 结果处理失败：' + (err && err.message || err), 6000);
       }
     } else if(message.type === 'scan-error'){
+      if(!screenPending || S.mode !== 'screen') return;
       screenPending = false;
       $('#btnRun').disabled = false;
       $('#btnStop').disabled = true;
       setPhase('ERROR'); setLed('err');
       toast('整屏读取失败：' + (message.message || '桌面 OCR 不可用'), 7000);
     } else if(message.type === 'scan-cancelled'){
+      if(!screenPending || S.mode !== 'screen') return;
       screenPending = false;
       $('#btnRun').disabled = false;
       $('#btnStop').disabled = true;
@@ -4036,11 +4038,22 @@ $('#btnReset').addEventListener('click', ()=>{
   toast('状态已重置');
 });
 $('#selMode').addEventListener('change', e=>{
-  if(screenPending && e.target.value !== 'screen'){
-    screenPending = false;
-    sendNative({ type:'cancel-scan' });
+  const nextMode = e.target.value;
+  if(S.mode === 'screen' && nextMode !== 'screen'){
+    if(screenPending){
+      screenPending = false;
+      sendNative({ type:'cancel-scan' });
+    } else if(S.running){
+      $('#btnStop').click();
+    }
+    sendNative({ type:'clear-overlay' });
+    if(S.file && S.file.kind === 'screen'){
+      S.file = null;
+      $('#dzName').textContent = '拖入文档或点击选择';
+      $('#dzMeta').textContent = '.docx · .md · .txt · .html · Scrapling 导出的 .json / .jsonl / .csv';
+    }
   }
-  S.mode = e.target.value;
+  S.mode = nextMode;
   setHeaderMode();
   applyModeLabels();
   connectNativeBridge();
