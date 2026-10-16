@@ -373,7 +373,6 @@ select.sel option{background:#04100e;color:var(--cyan)}
   cursor:pointer;border:1px dashed rgba(0,255,198,.38);background:rgba(0,255,198,.045);
   transition:border-color .15s,background .15s,box-shadow .15s}
 body.mode-file #dropZone{display:flex}
-body.mode-screen #dropZone{display:none}
 #dropZone:hover{border-color:rgba(0,255,198,.72);background:rgba(0,255,198,.1)}
 #dropZone.over{border-color:var(--yellow);background:rgba(255,214,10,.14);
   box-shadow:inset 0 0 24px rgba(255,214,10,.22)}
@@ -529,7 +528,6 @@ button.tbtn.x:hover{background:rgba(255,46,91,.26);color:#fff;box-shadow:0 0 12p
       <span class="led" id="ledA"></span><span class="led" id="ledB"></span><span class="led" id="ledC"></span>
       <select class="sel" id="selMode" title="数据来源">
         <option value="file">本地文件</option>
-        <option value="screen">Windows 整屏</option>
         <option value="sim">模拟引擎</option>
         <option value="real">真实抓取</option>
       </select>
@@ -1440,7 +1438,7 @@ function updatePet(dt){
 
   const tip = $('#bugTip');
   if(!tip) return;
-  const canPet = S.mode !== 'screen' && MOUSE.on && !S.running && bug.state === 'idle' && !bug.target;
+  const canPet = MOUSE.on && !S.running && bug.state === 'idle' && !bug.target;
   const near   = canPet && Math.hypot(MOUSE.x-bug.x, MOUSE.y-bug.y) < PET_RADIUS;
 
   if(near && !pet.near){                  // 刚被碰到：重置并触发
@@ -1585,7 +1583,7 @@ function drawNetwork(){
   drawNodes(g, t, nNow);
   drawLabels(g);
   drawPackets(g);
-  if(S.mode !== 'screen') drawBug(g);
+  drawBug(g);
   S.netDirty = false;
 }
 
@@ -2103,9 +2101,7 @@ function addExtract(node, hits, block){
   if(block){
     // 本地文件 / Scrapling 导出模式
     const tk = (node.tokens||[]).slice(0,5).map(t=>`<span>${escapeHtml(t)}</span>`).join('');
-    const head = S.mode === 'screen'
-      ? `<span class="ty" style="color:${tyCol}">屏幕文本</span>`
-      : node.isTable
+    const head = node.isTable
       ? `<span class="ty" style="color:#ffd60a">表格 ${node.tableIndex}</span>`
       : block.type === 'record'
         ? `<span class="ty" style="color:#5ad6ff">记录 ${((node.blockIndex|0)+1)}</span>`
@@ -2155,7 +2151,7 @@ function addExtract(node, hits, block){
 function updatePlCount(){
   const box = $('#payload');
   const shown = box.childElementCount;
-  const total = isDocumentMode() && S.matches.length ? S.matches.length : S.extracts.length;
+  const total = S.mode === 'file' && S.matches.length ? S.matches.length : S.extracts.length;
   $('#plCount').textContent = (total > shown ? '显示 ' + shown + ' / 共 ' + total : shown + ' 条');
 }
 /* 表格卡片：与关键词命中分开呈现，保证"完整提取"这件事在界面上看得见 */
@@ -2244,7 +2240,7 @@ function slowTick(){
   const rps = vis/secs;
 
   // 顶栏
-  const isFile = isDocumentMode();
+  const isFile = S.mode === 'file';
   $('#hClock').textContent = hhmmss(S.elapsed);
   $('#hTarget').textContent = (isFile && S.file) ? S.file.name : shortUrl(S.lastUrl, 30);
   const st = $('#hState');
@@ -2281,9 +2277,8 @@ function slowTick(){
   $('#c2hp').textContent = (hp*100).toFixed(0)+'%';
   $('#pb2').style.width = (avg*100)+'%';
 
-  $('#big3').textContent = S.mode === 'screen' ? S.scannedBlocks : isFile ? S.tables.length : hitTerms.length;
-  $('#big3s').textContent = S.mode === 'screen' ? 'OCR 文本行'
-      : isFile ? ('/ ' + hitTerms.length + ' 词') : ('/ '+S.terms.length);
+  $('#big3').textContent = isFile ? S.tables.length : hitTerms.length;
+  $('#big3s').textContent = isFile ? ('/ ' + hitTerms.length + ' 词') : ('/ '+S.terms.length);
   const topT = S.terms.slice().sort((a,b)=>b.hits-a.hits)[0];
   $('#c3top').textContent = topT && topT.hits ? topT.term : '—';
   $('#c3cov').textContent = (S.terms.length? hitTerms.length/S.terms.length*100 : 0).toFixed(0)+'%';
@@ -2311,12 +2306,10 @@ function slowTick(){
 
   // 统计（文件模式下按文档口径改写前几项，避免显示毫无意义的"0 / 36 页"）
   stEl['PAGES'].textContent     = isFile
-      ? (S.mode === 'screen'
-          ? (S.matches.length + ' 屏幕文字行 / ' + S.scannedBlocks + ' 行')
-          : (S.matches.length + ' 命中 / ' + S.scannedBlocks + ' 块'))
+      ? (S.matches.length + ' 命中 / ' + S.scannedBlocks + ' 块')
       : (vis + ' / ' + (S.cfg ? S.cfg.maxPages : 0));
   stEl['EDGES'].textContent     = S.links.length;
-  stEl['DISCOVERED'].textContent= S.mode === 'screen' ? S.scannedBlocks : isFile ? S.tables.length : S.discovered;
+  stEl['DISCOVERED'].textContent= isFile ? S.tables.length : S.discovered;
   stEl['BYTES'].textContent     = fmtBytes(isFile && S.file ? S.file.size : S.bytes);
   stEl['AVG REL'].textContent   = avg.toFixed(3);
   stEl['PEAK REL'].textContent  = peak.toFixed(3);
@@ -2327,8 +2320,7 @@ function slowTick(){
   stEl['DUPES'].textContent     = S.dupes;
   stEl['REQ/S'].textContent     = rps.toFixed(2);
   stEl['ELAPSED'].textContent   = hhmmss(S.elapsed);
-  stEl['MODE'].textContent      = S.mode==='screen'?'WINDOWS SCREEN'
-      : S.mode==='file'?'LOCAL FILE':S.mode==='sim'?'SIMULATED':'LIVE ('+S.relay+')';
+  stEl['MODE'].textContent      = S.mode==='sim'?'SIMULATED':'LIVE ('+S.relay+')';
 
   // 迷你走势
   if(S.scores.length){
@@ -3279,133 +3271,6 @@ function synthPage(rng, depth, target, cfg){
    13. 主流程
    ========================================================================== */
 let abortFlag = false;
-let nativeSocket = null;
-let nativeConnected = false;
-let screenPending = false;
-let nativeRetryTimer = 0;
-
-function sendNative(message){
-  if(!nativeSocket || nativeSocket.readyState !== 1) return false;
-  try { nativeSocket.send(JSON.stringify(message)); return true; }
-  catch(err){ console.error('Desktop bridge send failed:', err && err.message || err); return false; }
-}
-function connectNativeBridge(){
-  if(typeof WebSocket === 'undefined' || nativeSocket && nativeSocket.readyState < 2) return;
-  clearTimeout(nativeRetryTimer);
-  let socket;
-  try { socket = new WebSocket('ws://127.0.0.1:47831/forager'); }
-  catch(err){ scheduleNativeReconnect(); return; }
-  nativeSocket = socket;
-  socket.addEventListener('open', ()=>{
-    nativeConnected = true;
-    socket.send(JSON.stringify({ type:'hello' }));
-    syncRunBtn();
-  });
-  socket.addEventListener('message', e=>{
-    let message;
-    try { message = JSON.parse(e.data); }
-    catch(err){ console.error('Desktop bridge returned invalid JSON'); return; }
-    if(message.type === 'ready'){
-      nativeConnected = true;
-      syncRunBtn();
-    } else if(message.type === 'scan-complete'){
-      if(!screenPending || S.mode !== 'screen'){
-        sendNative({ type:'clear-overlay' });
-        return;
-      }
-      screenPending = false;
-      try{
-        S.file = screenDocumentFromResult(message);
-        $('#dzName').textContent = S.file.name;
-        $('#dzMeta').textContent = S.file.blocks.length + ' 个 OCR 文本行 · ' +
-                                  S.file.size + ' 个字符 · 仅本机处理';
-        runFileScan();
-      }catch(err){
-        $('#btnRun').disabled = false;
-        $('#btnStop').disabled = true;
-        setPhase('ERROR'); setLed('err');
-        toast('整屏 OCR 结果处理失败：' + (err && err.message || err), 6000);
-      }
-    } else if(message.type === 'scan-error'){
-      if(!screenPending || S.mode !== 'screen') return;
-      screenPending = false;
-      $('#btnRun').disabled = false;
-      $('#btnStop').disabled = true;
-      setPhase('ERROR'); setLed('err');
-      toast('整屏读取失败：' + (message.message || '桌面 OCR 不可用'), 7000);
-    } else if(message.type === 'scan-cancelled'){
-      if(!screenPending || S.mode !== 'screen') return;
-      screenPending = false;
-      $('#btnRun').disabled = false;
-      $('#btnStop').disabled = true;
-      syncRunBtn();
-    }
-  });
-  socket.addEventListener('close', ()=>{
-    if(nativeSocket === socket) nativeSocket = null;
-    nativeConnected = false;
-    if(screenPending){
-      screenPending = false;
-      $('#btnRun').disabled = false;
-      $('#btnStop').disabled = true;
-      toast('桌面桥接连接已断开，整屏读取已取消', 5000);
-    }
-    syncRunBtn();
-    scheduleNativeReconnect();
-  });
-  socket.addEventListener('error', ()=>{});
-}
-function scheduleNativeReconnect(){
-  nativeConnected = false;
-  syncRunBtn();
-  if(typeof WebSocket !== 'undefined')
-    nativeRetryTimer = setTimeout(connectNativeBridge, 3000);
-}
-function screenDocumentFromResult(result){
-  if(!result || !Array.isArray(result.blocks))
-    throw new Error('桥接程序没有返回有效的 OCR 文本行');
-  const screen = result.virtualScreen || {};
-  const bounds = ['x','y','width','height'].map(k=>Number(screen[k]));
-  if(bounds.some(n=>!Number.isFinite(n)) || bounds[2] <= 0 || bounds[3] <= 0)
-    throw new Error('桥接程序没有返回有效的虚拟桌面边界');
-  const blocks = result.blocks.map(line=>{
-    if(!line || typeof line.text !== 'string' || !line.text.trim())
-      throw new Error('OCR 文本行格式无效');
-    const rect = ['x','y','width','height'].map(k=>Number(line[k]));
-    if(rect.some(n=>!Number.isFinite(n)) || rect[2] <= 0 || rect[3] <= 0)
-      throw new Error('OCR 文本行缺少有效的屏幕坐标');
-    if(rect[0] < bounds[0]-1 || rect[1] < bounds[1]-1 ||
-       rect[0]+rect[2] > bounds[0]+bounds[2]+1 ||
-       rect[1]+rect[3] > bounds[1]+bounds[3]+1)
-      throw new Error('OCR 文本行坐标超出虚拟桌面范围');
-    return { type:'p', text:line.text.trim(),
-      screenRect:{ x:rect[0], y:rect[1], width:rect[2], height:rect[3] } };
-  });
-  const doc = finalizeDoc('Windows 桌面屏幕', 'screen', blocks,
-                          new TextEncoder().encode(blocks.map(b=>b.text).join('\n')).length);
-  doc.virtualScreen = { x:bounds[0], y:bounds[1], width:bounds[2], height:bounds[3] };
-  return doc;
-}
-function requestScreenScan(){
-  if(screenPending || S.running) return;
-  if(!nativeConnected){
-    toast('桌面桥接程序未连接。请先启动 windows-desktop，再重新打开或等待本页自动连接。', 6000);
-    connectNativeBridge();
-    return;
-  }
-  screenPending = true;
-  $('#btnRun').disabled = true;
-  $('#btnStop').disabled = false;
-  setLed('busy'); setPhase('SCREEN OCR');
-  toast('正在读取 Windows 虚拟桌面并识别文字；截图只在内存中处理');
-  if(!sendNative({ type:'start-scan' })){
-    screenPending = false;
-    $('#btnRun').disabled = false;
-    $('#btnStop').disabled = true;
-    setLed('err'); setPhase('ERROR');
-    toast('无法向桌面桥接程序发送读取请求');
-  }
-}
 
 function resetAll(keepPrompt){
   abortFlag = true;
@@ -3787,8 +3652,7 @@ async function runFileScan(){
     const res = scoreText(b.text, b.section || '', S.terms, kind, S.cfg.deny, true);
     b._score = res.score;
     b._hits = res.hits;
-    if(S.mode === 'screen' || res.score >= S.cfg.minConf)
-      S.matches.push({ block:b, score:res.score, hits:res.hits });
+    if(res.score >= S.cfg.minConf) S.matches.push({ block:b, score:res.score, hits:res.hits });
 
     // 覆盖率：本块内所有关键词命中区间的并集，其余即「关键词从未碰到的部分。
     const txt = b.text;
@@ -3829,7 +3693,7 @@ async function runFileScan(){
       if(abortFlag) break;
     }
   }
-  if(S.mode !== 'screen') S.matches.sort((a,b)=>b.score - a.score);
+  S.matches.sort((a,b)=>b.score - a.score);
 
   // 覆盖率结论：这是"完整提取"的可核对凭据，而不是一句口号
   cov.gaps.sort((a,b)=>b.len - a.len);
@@ -3856,13 +3720,8 @@ async function runFileScan(){
       ? clamp(t.hits.reduce((m,h)=>Math.max(m,h.w),0) * 0.7 + 0.25)
       : 0.18;
   }
-  addLog(S.mode === 'screen' ? 'OCR' : 'SCAN',
-         S.mode === 'screen'
-           ? '读取 ' + S.matches.length + ' 行屏幕文字'
-           : S.matches.length + ' 处命中 / ' + S.tables.length + ' 个表格',
-         1, S.matches.length ? 'v-hit' : 'v-rej');
-  if(!S.matches.length && S.mode !== 'screen')
-    toast('没有命中任何关键词，试试减少或更换关键词；表格仍已全部提取', 5000);
+  addLog('SCAN', S.matches.length + ' 处命中 / ' + S.tables.length + ' 个表格', 1, S.matches.length ? 'v-hit' : 'v-rej');
+  if(!S.matches.length) toast('没有命中任何关键词，试试减少或更换关键词；表格仍已全部提取', 5000);
 
   // ---- 阶段 2：动画呈现 top N ----
   const branchNodes = new Map();
@@ -3872,9 +3731,7 @@ async function runFileScan(){
     branchNodes.set(t.term, n);
     addLink(root, n, 0.92);
   }
-  const topN = S.mode === 'screen'
-    ? S.matches
-    : S.matches.slice(0, Math.max(4, S.cfg.maxPages));
+  const topN = S.matches.slice(0, Math.max(4, S.cfg.maxPages));
   const pace = clamp(1600 / Math.max(1, topN.length), 0, 110);
   bug.speed = clamp(2200 / Math.sqrt(Math.max(1, topN.length)), 260, 1200);
 
@@ -3883,9 +3740,8 @@ async function runFileScan(){
     if(abortFlag) break;
     const m = topN[i];
     const b = m.block;
-    const best = (m.hits.slice().sort((x,y)=>y.w - x.w)[0] || {}).term ||
-                 (S.terms[0] && S.terms[0].term) || '屏幕文字';
-    const parentKw = branchNodes.get(best) || branchNodes.get(S.terms[0] && S.terms[0].term);
+    const best = (m.hits.slice().sort((x,y)=>y.w - x.w)[0] || {}).term || S.terms[0].term;
+    const parentKw = branchNodes.get(best) || branchNodes.get(S.terms[0].term);
     const isTbl = b.type === 'table';
     const isRec = b.type === 'record';
 
@@ -3933,6 +3789,7 @@ async function runFileScan(){
     loc.blockStart = b.start;
     loc.isTable = b.type === 'table';
     if(loc.isTable) loc.tableIndex = b.table.index;
+
     S.bytes += b.len;
     S.scores.push(m.score);
     if(S.scores.length > MEM.KEEP_SCORES) S.scores.splice(0, S.scores.length - MEM.KEEP_SCORES);
@@ -3973,17 +3830,12 @@ async function runFileScan(){
   $('#btnStop').disabled = true;
   setLed('idle');
   setPhase('DONE');
-  S.bugMsg = S.mode === 'screen'
-    ? '桌面读取完成 · ' + S.matches.length + ' 行屏幕文字'
-    : '扫描完成 · ' + S.matches.length + ' 处命中 / ' + S.tables.length + ' 个表格';
+  S.bugMsg = '扫描完成 · ' + S.matches.length + ' 处命中 / ' + S.tables.length + ' 个表格';
   pruneGraph(true);
   updateExportBar();
   updateReviewStat();
-  toast(S.mode === 'screen'
-    ? '桌面读取完成：已保留全部 ' + S.matches.length + ' 行 OCR 文字，关键词覆盖率 ' +
-      ((S.coverage ? S.coverage.ratio : 0)*100).toFixed(1) + '%'
-    : '扫描完成：' + S.matches.length + ' 处命中，' + S.tables.length + ' 个表格，覆盖率 ' +
-      ((S.coverage ? S.coverage.ratio : 0)*100).toFixed(1) + '%');
+  toast('扫描完成：' + S.matches.length + ' 处命中，' + S.tables.length + ' 个表格，覆盖率 ' +
+        ((S.coverage ? S.coverage.ratio : 0)*100).toFixed(1) + '%');
 }
 
 /* ============================================================================
@@ -4023,60 +3875,30 @@ function frame(now){
    ========================================================================== */
 $('#btnRun').addEventListener('click', ()=>{ if(S.running) return; startRun(); });
 function startRun(){
-  if(S.mode === 'screen') requestScreenScan();
-  else if(S.mode === 'file') runFileScan();
+  if(S.mode === 'file') runFileScan();
   else runCrawl();
 }
 $('#btnStop').addEventListener('click', ()=>{
-  if(S.mode === 'screen' && screenPending){
-    screenPending = false;
-    sendNative({ type:'cancel-scan' });
-    $('#btnStop').disabled = true;
-    $('#btnRun').disabled = false;
-    setPhase('STOPPED'); setLed('idle');
-    toast('已取消整屏读取');
-    return;
-  }
   if(!S.running) return;
   abortFlag = true; S.running = false;
-  if(S.mode === 'screen') sendNative({ type:'clear-overlay' });
   setPhase('STOPPED'); setLed('idle');
   addLog('ABORT','user/interrupt',0,'v-rej');
   toast('已中止抓取');
 });
 $('#btnReset').addEventListener('click', ()=>{
-  if(screenPending){ screenPending = false; sendNative({ type:'cancel-scan' }); }
-  sendNative({ type:'clear-overlay' });
   resetAll(true);
   $('#hState').textContent='IDLE';
   toast('状态已重置');
 });
 $('#selMode').addEventListener('change', e=>{
-  const nextMode = e.target.value;
-  if(S.mode === 'screen' && nextMode !== 'screen'){
-    if(screenPending){
-      screenPending = false;
-      sendNative({ type:'cancel-scan' });
-    } else if(S.running){
-      $('#btnStop').click();
-    }
-    sendNative({ type:'clear-overlay' });
-    if(S.file && S.file.kind === 'screen'){
-      S.file = null;
-      $('#dzName').textContent = '拖入文档或点击选择';
-      $('#dzMeta').textContent = '.docx · .md · .txt · .html · Scrapling 导出的 .json / .jsonl / .csv';
-    }
-  }
-  S.mode = nextMode;
+  S.mode = e.target.value;
   setHeaderMode();
   applyModeLabels();
-  connectNativeBridge();
   maybeSwapDefaultPrompt(S.mode);
   const p = parsePrompt(edTa.value);
   S.cfg = p.cfg; S.terms = p.terms; S.top = p.top;
   buildHeat();
   if(S.mode === 'file')       toast('本地文件：拖入 .docx / .md 后，在左侧输入关键词即可提取');
-  else if(S.mode === 'screen') toast('Windows 整屏：启动桌面桥接程序后，点击启动才会读取屏幕');
   else if(S.mode === 'real')  toast('真实抓取：将经中继请求目标站点，注意目标可达性与频率限制');
 });
 $('#selRelay').addEventListener('change', e=>{ S.relay = e.target.value; });
@@ -4136,7 +3958,7 @@ function exportSnapshot(){
   const cfg = S.cfg || {};
   const minConf = cfg.minConf === undefined ? 0 : cfg.minConf;
   const pages = [];
-  const isFile = isDocumentMode();
+  const isFile = S.mode === 'file';
   if(isFile){
     // 本地文档：导出【全量】命中，不受动画呈现条数限制
     for(const m of S.matches){
@@ -4146,7 +3968,6 @@ function exportSnapshot(){
         kind: b.type === 'table' ? 'table' : 'text',
         tableIndex: b.type === 'table' ? b.table.index : 0,
         content: String(b.text || '').replace(/\s+/g,' ').trim().slice(0, 4000),
-        screenRect: b.screenRect || null,
         relevance: +m.score.toFixed(4),
         verdict: m.score >= minConf ? 'MATCH' : 'LOW',
         review: S.review[b._i] || '',
@@ -4172,14 +3993,12 @@ function exportSnapshot(){
     generator:'DOC-FORAGER v3.0',
     author:'Zong <2802077539@qq.com>',
     exportedAt:new Date().toISOString(),
-    mode: isFile ? (S.mode === 'screen' ? 'windows-screen' : 'local-file')
-                 : (S.mode==='sim' ? 'simulated' : 'live'),
+    mode: isFile ? 'local-file' : (S.mode==='sim' ? 'simulated' : 'live'),
     relay: S.mode==='real' ? S.relay : null,
     source: (isFile && S.file) ? {
       name:S.file.name, kind:S.file.kind, bytes:S.file.size,
       blocks:S.file.blocks.length, headings:S.file.headings.length,
-      tablesInDocument:S.file.tables.length,
-      virtualScreen:S.file.virtualScreen || null
+      tablesInDocument:S.file.tables.length
     } : null,
     /* 文档提取的完整性证据：读了哪些部件、还原了多少脚注/批注/符号/嵌套表 */
     extraction: (isFile && S.file) ? {
@@ -4423,7 +4242,7 @@ function toMarkdown(snap){
   L.push('');
   if(!snap.pages.length){
     L.push('_本次没有产生可导出的页面记录。_');
-  } else if(snap.mode === 'local-file' || snap.mode === 'windows-screen'){
+  } else if(snap.mode === 'local-file'){
     L.push('| # | 相关度 | 章节 | 偏移 | 命中分支 |');
     L.push('| ---: | ---: | --- | ---: | --- |');
     snap.pages.forEach((p,i)=>{
@@ -4464,7 +4283,7 @@ function toMarkdown(snap){
     L.push('');
     L.push('## 抽取内容');
     for(const p of snap.pages){
-      if(snap.mode === 'local-file' || snap.mode === 'windows-screen'){
+      if(snap.mode === 'local-file'){
         L.push('');
         L.push('### ' + String(p.section || '正文').replace(/\|/g,'\\|') + '  `' + p.relevance.toFixed(3) + '`');
         L.push('');
@@ -4534,7 +4353,7 @@ function updateExportBar(){
   e.classList.toggle('show', ready);
   if(!ready) e.classList.remove('open');
   const n = $('#expN');
-  if(n) n.textContent = isDocumentMode() ? (S.matches.length || S.tables.length) : S.visited;
+  if(n) n.textContent = S.mode === 'file' ? (S.matches.length || S.tables.length) : S.visited;
   const tb = $('#expTables');
   if(tb) tb.classList.toggle('hide', !S.tables.length);
   updateReviewStat();
@@ -4578,28 +4397,18 @@ const MODE_UI = {
     big3s:'/ 0'
   }
 };
-MODE_UI.screen = {
-  ...MODE_UI.file,
-  file:'desktop-screen',
-  hint:'点击启动读取当前桌面全部文字 · 截图仅内存处理 · 关键词评分用于审计，不过滤 OCR 结果',
-  bar:'SCREEN OCR CONTENT',
-  cards:['▚ SCREEN TEXT LINES','▚ MEAN RELEVANCE','▚ OCR BLOCKS']
-};
 MODE_UI.real = MODE_UI.sim;
 
-function isDocumentMode(){ return S.mode === 'file' || S.mode === 'screen'; }
 function syncRunBtn(){
   const needFile = S.mode === 'file' && !S.file;
-  const needBridge = S.mode === 'screen' && !nativeConnected;
   const b = $('#btnRun');
-  if(b && !S.running && !screenPending) b.disabled = needFile || needBridge;
+  if(b && !S.running) b.disabled = needFile;
   const r = $('#selRelay');
   if(r) r.disabled = S.mode !== 'real';
 }
 function applyModeLabels(){
   const u = MODE_UI[S.mode] || MODE_UI.sim;
-  document.body.classList.toggle('mode-file', isDocumentMode());
-  document.body.classList.toggle('mode-screen', S.mode === 'screen');
+  document.body.classList.toggle('mode-file', S.mode === 'file');
   $('#edTitle').textContent = u.title;
   $('#edFile').textContent  = u.file;
   $('#edHint').textContent  = u.hint;
@@ -4615,14 +4424,13 @@ function applyModeLabels(){
   syncRunBtn();
 }
 function setHeaderMode(){
-  $('#hMode').textContent = S.mode === 'screen' ? 'WINDOWS-SCREEN'
-                          : S.mode === 'file' ? 'LOCAL-FILE'
+  $('#hMode').textContent = S.mode === 'file' ? 'LOCAL-FILE'
                           : S.mode === 'sim'  ? 'SIMULATION' : 'LIVE-FETCH';
 }
 function maybeSwapDefaultPrompt(mode){
   const cur = edTa.value;
   if(cur.trim() === '' || cur === DEMO_KEYWORDS || DEMO_PROMPTS.indexOf(cur) >= 0){
-    setPrompt(mode === 'file' || mode === 'screen' ? DEMO_KEYWORDS : DEMO_PROMPTS[0]);
+    setPrompt(mode === 'file' ? DEMO_KEYWORDS : DEMO_PROMPTS[0]);
   }
 }
 
@@ -4882,7 +4690,6 @@ setPrompt(DEMO_KEYWORDS);
   bugInit();
   setHeaderMode();
   applyModeLabels();
-  connectNativeBridge();
   S.t0 = performance.now();
   updateExportBar();
   slowTick();

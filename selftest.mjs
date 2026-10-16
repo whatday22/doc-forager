@@ -100,7 +100,6 @@ globalThis.__T = { S, stepSim, net, addNode, addLink, parsePrompt, scoreText, bu
   DOCX_PART, parseCSV, csvToRecords, parseJSONRecords, recordsToDoc, gapsCSV,
   updateReviewStat, wSymChar, listMarker, romanNum, cnNum, flattenValue, guessFieldRole,
   ROLE_ALIAS, openCoverage, computeCoverage: null,
-  screenDocumentFromResult, isDocumentMode,
   // 彩蛋：待机时摸虫子的交互
   bug, pet, PET_TEXT, PET_RADIUS, updatePet, listeners, clsState,
   // 「选择器」指令的作用域
@@ -687,25 +686,6 @@ ok(mdoc.tables[0].index === 1, '表格编号从 1 开始');
 const financeBlock = mdoc.blocks.filter(b => b.type === 'p' && b.text.indexOf('财务') >= 0)[0];
 ok(!!financeBlock && financeBlock.section === '财务报告', '段落归属章节 = ' + (financeBlock && financeBlock.section));
 ok(T.parsePlain('段落一。\n\n段落二。\n\n\n段落三。').length === 3, '纯文本按空行切段');
-const screenDoc = T.screenDocumentFromResult({
-  virtualScreen:{ x:-1920, y:0, width:3840, height:1080 },
-  blocks:[
-    { text:'财务 营收', x:-1880, y:120, width:180, height:24 },
-    { text:'不含关键词的屏幕文字也应完整保留', x:40, y:220, width:240, height:24 }
-  ]
-});
-ok(screenDoc.kind === 'screen' && screenDoc.blocks.length === 2,
-   '整屏 OCR 的所有文字行进入标准文档块模型');
-ok(screenDoc.blocks[0].screenRect.x === -1880 && screenDoc.virtualScreen.x === -1920,
-   '整屏文档保留多显示器负坐标与命中框');
-let badScreenRejected = false;
-try{
-  T.screenDocumentFromResult({
-    virtualScreen:{ x:0, y:0, width:100, height:100 },
-    blocks:[{ text:'越界', x:99, y:10, width:20, height:12 }]
-  });
-}catch(e){ badScreenRejected = /超出虚拟桌面范围/.test(e.message); }
-ok(badScreenRejected, '整屏 OCR 拒绝超出虚拟桌面边界的坐标');
 try { await T.parseLocalFile('旧文档.doc', new ArrayBuffer(8)); fails++; console.error('[FAIL] .doc 应当被拒绝'); }
 catch (e) { ok(/不支持 \.doc/.test(e.message), '.doc 被明确拒绝：' + e.message.slice(0, 40)); }
 try { await T.parseLocalFile('x.rtf', new ArrayBuffer(8)); fails++; console.error('[FAIL] 未知扩展名应当被拒绝'); }
@@ -775,23 +755,6 @@ const fMd = T.toMarkdown(fsnap);
 ok(fMd.indexOf('## 提取到的表格') > 0, 'Markdown 报告含表格章节');
 ok(fMd.indexOf('| 项目 | 2023 | 2024 |') > 0, 'Markdown 里表格被还原成表格');
 ok(fMd.indexOf('## 抽取内容') > 0, 'Markdown 含文档命中明细');
-
-// ---- 24.5) 整屏 OCR 块沿用文档评分、覆盖审计与导出 ----
-T.S.mode = 'screen';
-T.S.file = screenDoc;
-T.setPromptText('财务 营收\n置信度 0.05');
-await T.runFileScan();
-const screenSnap = T.exportSnapshot();
-ok(T.S.matches.length === 2 && T.S.coverage.totalChars > 0,
-   '整屏 OCR 全部文字行均被保留并经过关键词评分和覆盖审计');
-ok(screenSnap.mode === 'windows-screen' && screenSnap.pages[0].screenRect.x === -1880,
-   '整屏扫描导出模式和负坐标命中框');
-ok(screenSnap.pages.length === 2 && screenSnap.pages.some(p => p.content === '不含关键词的屏幕文字也应完整保留'),
-   '整屏导出包含未命中关键词的全部 OCR 文本');
-ok(T.toMarkdown(screenSnap).indexOf('## 抽取内容') > 0,
-   '整屏结果可生成文档模式 Markdown 报告');
-T.S.mode = 'file';
-T.S.file = mdoc;
 
 // ---- 25) 无命中时不应崩，且表格仍然全部提取 ----
 T.setPromptText('完全不存在的词汇XYZ');
@@ -1049,9 +1012,8 @@ ok(/Zong/.test(rs2.author || ''), '导出含作者署名 = ' + rs2.author);
 
   // 再次触碰应重新逐字
   moveH({ clientX: T.bug.x, clientY: T.bug.y });
-  await settle(2);
-  ok(txtEl.textContent.length < T.PET_TEXT.length && tipEl.classList.contains('show'),
-     '再次触碰从文案开头重新逐字');
+  await settle(1);
+  ok(txtEl.textContent.length === 0 && tipEl.classList.contains('show'), '再次触碰重新逐字');
 }
 
 console.log(fails === 0 ? '\n===== ALL CHECKS PASSED =====' : '\n===== ' + fails + ' CHECK(S) FAILED =====');
